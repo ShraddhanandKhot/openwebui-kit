@@ -53,11 +53,11 @@ except urllib.error.HTTPError as e:
 PY
 done
 
-# 3. Import Skills (content/skills/*.json → POST /api/v1/functions/create)
+# 3. Import Skills (content/skills/*.json → POST /api/v1/skills/create)
 if [ -d "content/skills" ]; then
     for jf in content/skills/*.json; do
         [ -f "$jf" ] || continue
-        python3 - "$BASE" "$KEY" "$jf" "skills" <<'PY'
+        python3 - "$BASE" "$KEY" "$jf" <<'PY'
 import sys, json, urllib.request, urllib.error
 base, key, path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
@@ -65,19 +65,18 @@ with open(path) as f:
 payload = {
     "id": str(d.get("id", "")),
     "name": d.get("name", ""),
-    "type": "skill",
+    "description": d.get("description", ""),
     "content": d.get("content", ""),
     "meta": d.get("meta", {}),
     "is_active": bool(d.get("is_active", True)),
-    "is_global": bool(d.get("is_global", False)),
 }
-req = urllib.request.Request(f"{base}/api/v1/functions/create",
+req = urllib.request.Request(f"{base}/api/v1/skills/create",
     data=json.dumps(payload).encode(),
     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     method="POST")
 try:
     with urllib.request.urlopen(req) as resp:
-        print(f"      ✓ skill: {payload['name'] or payload['id']} (HTTP {resp.status})")
+        print(f"      ✓ skill: {payload['id']} (HTTP {resp.status})")
 except urllib.error.HTTPError as e:
     body = e.read().decode()
     if e.code == 400 and "already" in body.lower():

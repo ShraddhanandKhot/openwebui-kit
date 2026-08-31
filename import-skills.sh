@@ -29,19 +29,18 @@ with open(path) as f:
 payload = {
     "id": str(d.get("id", "")),
     "name": d.get("name", ""),
-    "type": "skill",
+    "description": d.get("description", ""),
     "content": d.get("content", ""),
     "meta": d.get("meta", {}),
     "is_active": bool(d.get("is_active", True)),
-    "is_global": bool(d.get("is_global", False)),
 }
-req = urllib.request.Request(f"{base}/api/v1/functions/create",
+req = urllib.request.Request(f"{base}/api/v1/skills/create",
     data=json.dumps(payload).encode(),
     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     method="POST")
 try:
     with urllib.request.urlopen(req) as resp:
-        print(f"      ✓ skill: {payload['name'] or payload['id']} (HTTP {resp.status})")
+        print(f"      ✓ skill: {payload['id']} (HTTP {resp.status})")
 except urllib.error.HTTPError as e:
     body = e.read().decode()
     if e.code == 400 and "already" in body.lower():
