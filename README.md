@@ -1,6 +1,6 @@
 # OpenWebUI — Customized OpenWebUI with Spryntworks patches, AnyDoc pipeline, and file-generation tools
 
-A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools).
+A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts).
 
 ## Quick start
 
@@ -29,11 +29,15 @@ In the browser: **Settings → Model Connections** → paste your
 OpenAI / OpenRouter / Ollama key. You choose your models — we never
 ship our keys.
 
-## Include the Workspace Tools (optional)
+## Import all content (Tools + Skills + Prompts)
 
 ```bash
-./import-tools.sh <your-admin-api-key>
+./import-content.sh <your-admin-api-key>
 ```
+
+This imports all bundled Workspace Tools, Skills, and Prompts in one
+command. (import-tools.sh is a subset — import-content.sh is the
+complete restore.)
 
 Key location: Settings → Admin Panel → API Keys → Generate.
 
@@ -59,7 +63,7 @@ It survives every update — never delete it unless you want to start fresh.
 
 ## What's included
 
-- Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools)
+- Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts)
 
 ## Support
 
