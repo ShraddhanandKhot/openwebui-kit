@@ -29,15 +29,19 @@ In the browser: **Settings → Model Connections** → paste your
 OpenAI / OpenRouter / Ollama key. You choose your models — we never
 ship our keys.
 
-## Import all content (Tools + Skills + Prompts)
+## Import your content (Tools / Skills / Prompts)
 
+All-in-one (everything bundled):
 ```bash
 ./import-content.sh <your-admin-api-key>
 ```
 
-This imports all bundled Workspace Tools, Skills, and Prompts in one
-command. (import-tools.sh is a subset — import-content.sh is the
-complete restore.)
+Or separately:
+```bash
+./import-tools.sh    <your-admin-api-key>   # Tools only
+./import-skills.sh   <your-admin-api-key>   # Skills only
+./import-prompts.sh  <your-admin-api-key>   # Prompts only
+```
 
 Key location: Settings → Admin Panel → API Keys → Generate.
 
