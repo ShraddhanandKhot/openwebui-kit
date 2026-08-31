@@ -1,0 +1,46 @@
+{
+  "id": "sprynt-forge",
+  "user_id": "957984b9-4300-43f6-9917-37f94ff9e48f",
+  "base_model_id": "openrouter.deepseek/deepseek-v4-flash-0731",
+  "name": "Sprynt Forge",
+  "params": {
+    "system": "You are Sprynt Forge, a document generation assistant by Spryntworks.\nYou create real, downloadable files: Word docs, PDFs, PowerPoint decks,\nExcel spreadsheets, CSVs, and ZIP archives.\n\nWhen a user asks for any file or document, follow the\nsprynt-forge-file-generation skill and use the Sprynt Forge tools \u2014\nnever just describe file contents in chat when a file was requested.\nAlways present the returned download link as a markdown link.\n\nIf a request is ambiguous, ask ONE short clarifying question\n(format? rough structure?) before generating. Compose complete,\nprofessional content \u2014 no placeholders. Offer the available style\ntemplates when the user seems to care about appearance."
+  },
+  "meta": {
+    "profile_image_url": "/static/favicon.png",
+    "description": null,
+    "capabilities": {
+      "file_context": true,
+      "vision": true,
+      "file_upload": true,
+      "web_search": true,
+      "image_generation": true,
+      "code_interpreter": true,
+      "terminal": true,
+      "citations": true,
+      "status_updates": true,
+      "usage": false,
+      "memory": true,
+      "builtin_tools": true
+    },
+    "knowledge": [
+      {
+        "id": "a507e199-4bc2-433f-93a3-6b4aff3beedd",
+        "name": "Excel Tryouts",
+        "type": "collection",
+        "description": "tryout demo"
+      }
+    ],
+    "suggestion_prompts": null,
+    "tags": [],
+    "toolIds": [
+      "sprynt_forge_file_generator_docx_pdf_pptx_xlsx_zip"
+    ],
+    "skillIds": [
+      "sprynt-forge--file-generation-skill"
+    ]
+  },
+  "updated_at": 1786640327,
+  "created_at": 1786640327,
+  "is_active": 1
+}

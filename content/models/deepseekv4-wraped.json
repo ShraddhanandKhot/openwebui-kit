@@ -1,0 +1,117 @@
+{
+  "id": "deepseekv4-wraped",
+  "user_id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+  "base_model_id": "openrouter.deepseek/deepseek-v4-flash",
+  "name": "DeepSeekV4-(wraped)",
+  "params": {},
+  "meta": {
+    "profile_image_url": "/static/favicon.png",
+    "description": null,
+    "capabilities": {
+      "file_context": true,
+      "vision": true,
+      "file_upload": true,
+      "web_search": true,
+      "image_generation": true,
+      "code_interpreter": true,
+      "terminal": true,
+      "citations": true,
+      "status_updates": true,
+      "builtin_tools": true
+    },
+    "suggestion_prompts": null,
+    "tags": [],
+    "knowledge": [
+      {
+        "id": "7242c11e-f682-4121-81db-80cb413362cd",
+        "user_id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+        "name": "Finance Demo",
+        "description": "Get answers based on Finance Docs",
+        "meta": null,
+        "access_grants": [],
+        "created_at": 1785244948,
+        "updated_at": 1785244948,
+        "user": {
+          "id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+          "name": "Shraddhanand Kumar Khot",
+          "role": "admin",
+          "email": "shra2309@gmail.com"
+        },
+        "write_access": true,
+        "type": "collection"
+      },
+      {
+        "id": "e684fbf5-8a9f-4c63-bca0-578d7b3335bb",
+        "user_id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+        "name": "Law collection",
+        "description": "",
+        "meta": null,
+        "access_grants": [],
+        "created_at": 1785495330,
+        "updated_at": 1785495330,
+        "user": {
+          "id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+          "name": "Shraddhanand Kumar Khot",
+          "role": "admin",
+          "email": "shra2309@gmail.com"
+        },
+        "write_access": true,
+        "type": "collection"
+      },
+      {
+        "id": "e8bd1c65-d353-41c3-88c1-da27370de1d8",
+        "user_id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+        "name": "Gdrive Collection",
+        "description": "To sync with GDrive",
+        "meta": null,
+        "access_grants": [],
+        "created_at": 1785827264,
+        "updated_at": 1785841714,
+        "user": {
+          "id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+          "name": "Shraddhanand Kumar Khot",
+          "role": "admin",
+          "email": "shra2309@gmail.com"
+        },
+        "write_access": true,
+        "type": "collection"
+      },
+      {
+        "id": "fe4b2bc6-6653-4460-b051-3e01d8ed7375",
+        "user_id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+        "title": "Solandra Capital Group - One Page Summary",
+        "data": {},
+        "meta": null,
+        "is_pinned": false,
+        "access_grants": [],
+        "created_at": 1786448376515628500,
+        "updated_at": 1786448406899533800,
+        "user": {
+          "id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+          "name": "Shraddhanand Kumar Khot",
+          "role": "admin",
+          "email": "shra2309@gmail.com"
+        },
+        "type": "note",
+        "name": "Solandra Capital Group - One Page Summary",
+        "description": "a day ago"
+      }
+    ],
+    "toolIds": [
+      "pdf_generator",
+      "excel_generator"
+    ],
+    "skillIds": [
+      "rpt-audit",
+      "artifact-terminal",
+      "audit-checker",
+      "audit-terminal"
+    ],
+    "defaultFeatureIds": [
+      "web_search"
+    ]
+  },
+  "updated_at": 1786529525,
+  "created_at": 1786529390,
+  "is_active": 1
+}

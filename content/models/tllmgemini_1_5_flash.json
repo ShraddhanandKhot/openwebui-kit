@@ -1,0 +1,16 @@
+{
+  "id": "tllm/gemini_1_5_flash",
+  "user_id": "f6f828c2-4014-454f-8064-560f41b9e39a",
+  "base_model_id": null,
+  "name": "Gemini 1.5 Flash (The Old LLM \ud83c\udd93)",
+  "params": {},
+  "meta": {
+    "profile_image_url": null,
+    "description": null,
+    "capabilities": null,
+    "hidden": true
+  },
+  "updated_at": 1784096842,
+  "created_at": 1784096842,
+  "is_active": 1
+}

@@ -41,9 +41,23 @@ Or separately:
 ./import-tools.sh    <your-admin-api-key>   # Tools only
 ./import-skills.sh   <your-admin-api-key>   # Skills only
 ./import-prompts.sh  <your-admin-api-key>   # Prompts only
+./import-models.sh   <your-admin-api-key>   # Models only
 ```
 
 Key location: Settings → Admin Panel → API Keys → Generate.
+
+## Models
+
+The bundled models are configs/wrappers (name, base model, attached
+tools/skills, parameters). Connect YOUR provider first:
+**Settings → Model Connections** → paste your OpenAI / OpenRouter /
+Ollama key — then import the model configs:
+
+```bash
+./import-models.sh <your-admin-api-key>
+```
+
+Your API key is never shipped — it stays on your machine.
 
 ## Update
 
