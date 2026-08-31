@@ -26,12 +26,16 @@ import sys, json, urllib.request, urllib.error
 base, key, path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
     d = json.load(f)
+# meta is stored as a JSON string in the DB — parse it to a dict
+meta = d.get("meta", {})
+if isinstance(meta, str):
+    meta = json.loads(meta) if meta.strip() else {}
 payload = {
     "id": str(d.get("id", "")),
     "name": d.get("name", ""),
     "description": d.get("description", ""),
     "content": d.get("content", ""),
-    "meta": d.get("meta", {}),
+    "meta": meta,
     "is_active": bool(d.get("is_active", True)),
 }
 req = urllib.request.Request(f"{base}/api/v1/skills/create",

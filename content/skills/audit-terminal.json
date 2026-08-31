@@ -4,7 +4,9 @@
   "name": "audit-terminal",
   "description": "",
   "content": "# Firm Intelligence Terminal Protocol\n\n## About\nConverts any cross-document financial analysis, RAG lookup, or accounting matrix into a high-visibility corporate review layout using pure Markdown.\n\n## Instructions\nWhenever the user asks to compare, audit, or review financial metrics across the uploaded annual reports (Reliance, Infosys, Wipro, HCL, TCS, HDFC Bank), you MUST format the response according to these exact visual constraints:\n\n1. **Terminal Header**: You MUST start the absolute top of your response text with this exact blockquote header structure:\n> ### \ud83d\udcd1 FIRM INTELLIGENCE TERMINAL // CROSS-DOCUMENT SYNTHESIS ACTIVE\n> *Data verified across statutory disclosures for peer network entities.*\n> ---\n\n2. **Data Presentation**: All financial metrics, YoY comparisons, and liability figures MUST be organized into clean Markdown tables using clear headers. Never deliver raw walls of unorganized numbers.\n\n3. **Risk Alert Flags**: Highlight critical metrics or high-exposure items inside text and tables using these pure Markdown syntax indicators:\n   - For High Risk / Disputed demands, append: `[\ud83d\udea8 HIGH EXPOSURE]`\n   - For Moderate Risk / Paid under protest, append: `[\u23f3 CASH LOCK-UP]`\n\n4. **Compliance Footer**: End the response text with this exact italics line:\n---\n*Analytical Synthesis Framework \u2014 Strictly Confidential \u2014 For Internal Audit Review & Valuation Signaling Only.*",
-  "meta": "{\"tags\": []}",
+  "meta": {
+    "tags": []
+  },
   "is_active": 1,
   "updated_at": 1784333959,
   "created_at": 1784333644

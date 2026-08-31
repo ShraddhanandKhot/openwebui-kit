@@ -4,7 +4,9 @@
   "name": "artifact-terminal",
   "description": "",
   "content": "# Auto-Artifact Audit Terminal Protocol\n\n## About\nForces all RAG lookups, financial metrics, and audit notes to automatically render inside the native Open WebUI side-panel artifact window.\n\n## Instructions\nWhenever the user asks you to extract, analyze, or review financial metrics or compliance data from the uploaded annual reports (Reliance, Infosys, Wipro, TCS, HCL, HDFC Bank), you MUST wrap your entire response inside the native Open WebUI artifact code fence syntax. \n\nFollow these formatting rules strictly:\n\n1. **The Code Block Hook**: You must begin your response with an open code block explicitly typed as `xml`, followed immediately by a root `<artifact>` element:\n```xml\n<artifact title=\"Financial Audit & Compliance Note\" type=\"text/markdown\" id=\"audit-compliance-note\">",
-  "meta": "{\"tags\": []}",
+  "meta": {
+    "tags": []
+  },
   "is_active": 1,
   "updated_at": 1784335876,
   "created_at": 1784335876

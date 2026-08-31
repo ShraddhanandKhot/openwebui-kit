@@ -4,7 +4,9 @@
   "name": "Audit checker",
   "description": "",
   "content": "# Audit Working Paper Checklist Protocol\n\n## About\nTranslates corporate report lookups into structured, audit-ready compliance checklists using clean Markdown formatting.\n\n## Instructions\nWhenever the user requests an audit lookup, risk check, or disclosure verification for any company (Reliance, Infosys, Wipro, TCS, HCL, HDFC Bank), you MUST format the response as a formal working paper checklist using these constraints:\n\n1. **Audit Working Paper Header**: You MUST start the absolute top of the response with this clean blockquote framework:\n> ### \ud83d\udcca AUDIT WORKING PAPER // SUBSTANTIVE TESTING CHECKLIST\n> **Target Review Entity:** [Insert Extracted Company Name]  \n> **Financial Year:** FY 2024-25 (Latest Disclosures)\n> ---\n\n2. **The Verification Checklist**: Present the extracted facts as an audit verification grid. Use clean Markdown task checkboxes (`- [ ]` or `- [x]`) to show the compliance status:\n   - Use `- [x] Verified & Disclosed` for items found with clear figures.\n   - Use `- [ ] Review Required / Disputed` for high-risk pending items or missing details.\n\n3. **Source Mapping**: Every checklist item must end with an italicized pointer to the exact section or note where the data was found (e.g., *Ref: Note 32 - Contingent Liabilities*).\n\n4. **Sign-off Footer**: End the document with this clean footer line:\n---\n*Prepared via Automated Audit Framework. Cross-verified against statutory filings.*",
-  "meta": "{\"tags\": []}",
+  "meta": {
+    "tags": []
+  },
   "is_active": 1,
   "updated_at": 1784338066,
   "created_at": 1784334324
