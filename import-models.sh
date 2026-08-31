@@ -45,11 +45,6 @@ payload = {
     "params": to_obj(d.get("params")),
     "is_active": bool(d.get("is_active", True)),
 }
-# skip empty payloads
-if not payload["id"] or not payload["name"]:
-    print(f"      • skipping {path} (missing id/name)")
-    continue
-
 req = urllib.request.Request(f"{base}/api/v1/models/create",
     data=json.dumps(payload).encode(),
     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
