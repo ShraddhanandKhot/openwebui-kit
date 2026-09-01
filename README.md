@@ -1,6 +1,6 @@
 # OpenWebUI — Customized OpenWebUI with Spryntworks patches, AnyDoc pipeline, and file-generation tools
 
-A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts).
+A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts), Sprynt CLI (one-command client tool).
 
 ## Quick start
 
@@ -13,6 +13,24 @@ A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), 
 ```
 
 4. Open http://localhost:8080 and sign up (first account = admin).
+
+## Easier: the sprynt CLI (recommended)
+
+Install the one-word command, then use it for everything:
+
+```bash
+sudo bash install-sprynt.sh          # installs the 'sprynt' command
+sprynt install                       # install (same as ./install.sh)
+sprynt login <admin-api-key>         # save your key once
+sprynt list                          # see bundled tools/skills/models
+sprynt import                        # import everything
+sprynt import tools pdf_generator    # import specific items only
+sprynt status                        # is it running? which version?
+sprynt update                        # update later
+sprynt remove                        # uninstall
+```
+
+No scripts, no paths — just short commands.
 
 ## Settings
 
@@ -81,7 +99,7 @@ It survives every update — never delete it unless you want to start fresh.
 
 ## What's included
 
-- Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts)
+- Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts), Sprynt CLI (one-command client tool)
 
 ## Support
 

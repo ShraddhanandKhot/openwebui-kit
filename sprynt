@@ -1,0 +1,477 @@
+#!/usr/bin/env python3
+"""
+sprynt — the Spryntworks kit CLI.
+
+One command to install, list, import, update, and manage a customized
+OpenWebUI kit. Sub-commands:
+
+  sprynt install                install the kit (docker compose up)
+  sprynt list                   show bundled tools/skills/models/prompts
+  sprynt import                 import ALL bundled content
+  sprynt import tools <ids>     import specific tools (comma-separated)
+  sprynt import skills <ids>    import specific skills
+  sprynt import models <ids>    import specific models
+  sprynt import prompts <ids>   import specific prompts
+  sprynt import --select        interactive selection
+  sprynt login <api-key>        remember the admin API key
+  sprynt update                 pull new image + restart
+  sprynt status                 show running state + version
+  sprynt remove                 uninstall (keep data)
+  sprynt help                   show help
+
+Requirements: Python 3, Docker, and the kit folder (auto-detected).
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+# --------------------------------------------------------------------------
+# kit detection
+# --------------------------------------------------------------------------
+
+MARKER = ".sprynt-kit"
+CONFIG_PATH = Path.home() / ".spryntrc"
+
+
+def find_kit() -> Path:
+    # 1. explicit env var
+    env = os.environ.get("SPRYNT_KIT")
+    if env and Path(env).is_dir():
+        return Path(env)
+    # 2. saved config
+    if CONFIG_PATH.exists():
+        p = CONFIG_PATH.read_text().strip()
+        if p and Path(p).is_dir():
+            return Path(p)
+    # 3. search cwd and parents for the marker
+    cur = Path.cwd()
+    for parent in [cur, *cur.parents]:
+        if (parent / MARKER).exists():
+            return parent
+    # 4. fallback: look for the kit dir in home
+    for candidate in (Path.home() / "openwebui-kit", Path.home() / "spryntworks-kit"):
+        if candidate.exists() and (candidate / "docker-compose.yml").exists():
+            return candidate
+    print("✗ Could not find the kit folder.", file=sys.stderr)
+    print("  Run this from inside the kit folder, or set SPRYNT_KIT=/path/to/kit", file=sys.stderr)
+    print("  or run: sprynt setup /path/to/kit", file=sys.stderr)
+    sys.exit(1)
+
+
+def require_kit() -> Path:
+    kit = find_kit()
+    os.chdir(kit)
+    return kit
+
+
+# --------------------------------------------------------------------------
+# helpers
+# --------------------------------------------------------------------------
+
+def port() -> str:
+    return os.environ.get("OPENWEBUI_PORT", "8080")
+
+
+def base_url() -> str:
+    return f"http://localhost:{port()}"
+
+
+def docker(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["docker", *args], capture_output=True, text=True)
+
+
+def docker_sudo(*args: str) -> subprocess.CompletedProcess:
+    # try plain docker first, fall back to sudo (many VPS need it)
+    r = docker(*args)
+    if r.returncode != 0 and "permission denied" in (r.stderr + r.stdout).lower():
+        r = subprocess.run(["sudo", "docker", *args], capture_output=True, text=True)
+    return r
+
+
+def api_post(path: str, payload: dict, key: str) -> tuple[int, str]:
+    req = urllib.request.Request(
+        f"{base_url()}{path}",
+        data=json.dumps(payload).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def get_key(store: bool = False) -> str:
+    env_key = os.environ.get("SPRYNT_API_KEY")
+    if env_key:
+        return env_key
+    if CONFIG_PATH.exists():
+        for line in CONFIG_PATH.read_text().splitlines():
+            if line.startswith("key="):
+                return line.split("=", 1)[1].strip()
+    print("✗ No API key. Provide one with: sprynt login <api-key>")
+    sys.exit(1)
+
+
+def to_obj(v):
+    if isinstance(v, str):
+        try:
+            return json.loads(v) if v.strip() else {}
+        except Exception:
+            return {}
+    return v or {}
+
+
+# --------------------------------------------------------------------------
+# content discovery (what's bundled in the kit)
+# --------------------------------------------------------------------------
+
+def list_tools(kit: Path) -> list[tuple[str, str]]:
+    out = []
+    for p in sorted((kit / "tools").glob("*.py")):
+        if p.parent.name == "anydoc_py":
+            continue
+        out.append((p.stem, p.name))
+    return out
+
+
+def list_json(kit: Path, sub: str) -> list[tuple[str, str]]:
+    out = []
+    d = kit / "content" / sub
+    if d.is_dir():
+        for p in sorted(d.glob("*.json")):
+            try:
+                data = json.loads(p.read_text())
+            except Exception:
+                data = {}
+            out.append((str(data.get("id") or p.stem), str(data.get("name") or p.stem)))
+    return out
+
+
+def copy_anydoc(kit: Path) -> None:
+    src = kit / "tools" / "anydoc_py"
+    dst = kit / "data" / "anydoc_py"
+    if src.is_dir():
+        (kit / "data").mkdir(exist_ok=True)
+        dst.mkdir(exist_ok=True)
+        for f in src.glob("*.py"):
+            shutil.copy2(f, dst / f.name)
+        print("  ✓ AnyDoc pipeline modules installed into ./data/anydoc_py/")
+
+
+# --------------------------------------------------------------------------
+# import
+# --------------------------------------------------------------------------
+
+def import_tools(kit: Path, key: str, ids: list[str] | None) -> None:
+    copy_anydoc(kit)
+    for tid, fname in list_tools(kit):
+        if ids and tid not in ids:
+            continue
+        content = (kit / "tools" / fname).read_text()
+        status, body = api_post("/api/v1/tools/create",
+                                {"id": tid, "name": tid, "content": content,
+                                 "meta": {"description": tid}}, key)
+        _report("tool", tid, status, body)
+
+
+def import_skills(kit: Path, key: str, ids: list[str] | None) -> None:
+    for sid, name in list_json(kit, "skills"):
+        if ids and sid not in ids:
+            continue
+        d = json.loads((kit / "content" / "skills" / f"{sid}.json").read_text()) if (kit / "content" / "skills" / f"{sid}.json").exists() else {}
+        # find the file (id may differ from filename)
+        for p in (kit / "content" / "skills").glob("*.json"):
+            dd = json.loads(p.read_text())
+            if str(dd.get("id")) == sid:
+                d = dd
+                break
+        payload = {"id": sid, "name": name, "description": d.get("description", ""),
+                   "content": d.get("content", ""), "meta": to_obj(d.get("meta")),
+                   "is_active": bool(d.get("is_active", True))}
+        status, body = api_post("/api/v1/skills/create", payload, key)
+        _report("skill", sid, status, body)
+
+
+def import_models(kit: Path, key: str, ids: list[str] | None) -> None:
+    for mid, name in list_json(kit, "models"):
+        if ids and mid not in ids:
+            continue
+        for p in (kit / "content" / "models").glob("*.json"):
+            dd = json.loads(p.read_text())
+            if str(dd.get("id")) == mid:
+                break
+        else:
+            dd = {}
+        payload = {"id": mid, "base_model_id": dd.get("base_model_id"),
+                   "name": name, "meta": to_obj(dd.get("meta")),
+                   "params": to_obj(dd.get("params")),
+                   "is_active": bool(dd.get("is_active", True))}
+        status, body = api_post("/api/v1/models/create", payload, key)
+        _report("model", mid, status, body)
+
+
+def import_prompts(kit: Path, key: str, ids: list[str] | None) -> None:
+    for pid, name in list_json(kit, "prompts"):
+        if ids and pid not in ids:
+            continue
+        for p in (kit / "content" / "prompts").glob("*.json"):
+            dd = json.loads(p.read_text())
+            if str(dd.get("command") or dd.get("id")) == pid:
+                break
+        else:
+            dd = {}
+        payload = {"command": dd.get("command", pid), "name": dd.get("name", name),
+                   "content": dd.get("content", ""), "meta": to_obj(dd.get("meta"))}
+        status, body = api_post("/api/v1/prompts/create", payload, key)
+        _report("prompt", pid, status, body)
+
+
+def _report(kind: str, item_id: str, status: int, body: str) -> None:
+    if status in (200, 201):
+        print(f"  ✓ {kind}: {item_id}")
+    elif status == 400 and "already" in body.lower():
+        print(f"  • {kind}: {item_id} already exists (skipped)")
+    else:
+        print(f"  ✗ {kind}: {item_id} failed (HTTP {status}) {body[:160]}")
+
+
+def interactive_pick(kit: Path) -> dict[str, list[str]]:
+    groups = {
+        "tools": list_tools(kit),
+        "skills": list_json(kit, "skills"),
+        "models": list_json(kit, "models"),
+        "prompts": list_json(kit, "prompts"),
+    }
+    # flatten into a numbered menu
+    menu = []
+    for kind, items in groups.items():
+        if not items:
+            continue
+        print(f"\n  {kind.upper()}:")
+        for i, (item_id, name) in enumerate(items, start=1):
+            menu.append((kind, item_id))
+            print(f"    [{i}] {item_id}  ({name})")
+    print("\n  Enter numbers separated by commas (e.g. 1,3,5), or 'all':")
+    try:
+        raw = input("  > ").strip()
+    except EOFError:
+        raw = "all"
+    if raw.lower() == "all":
+        return {k: [i for i, _ in v] for k, v in groups.items() if v}
+    picks: dict[str, list[str]] = {}
+    for token in raw.split(","):
+        token = token.strip()
+        if not token.isdigit():
+            continue
+        idx = int(token) - 1
+        if 0 <= idx < len(menu):
+            kind, item_id = menu[idx]
+            picks.setdefault(kind, []).append(item_id)
+    return picks
+
+
+# --------------------------------------------------------------------------
+# sub-commands
+# --------------------------------------------------------------------------
+
+def cmd_install(kit: Path, args) -> None:
+    # docker check
+    r = docker("--version")
+    if r.returncode != 0:
+        print("✗ Docker is not installed. Install Docker first, then re-run.")
+        sys.exit(1)
+    print(f"  ✓ Docker found")
+    if not (kit / ".env").exists():
+        if (kit / ".env.example").exists():
+            shutil.copy2(kit / ".env.example", kit / ".env")
+        print("  ✓ .env created (edit it to change the port)")
+    (kit / "data").mkdir(exist_ok=True)
+    print("  ✓ data directory ready")
+    r = docker_sudo("compose", "up", "-d", "--pull", "always")
+    print(r.stdout.strip())
+    if r.returncode != 0:
+        print(r.stderr.strip() or "✗ failed to start")
+        sys.exit(1)
+    # wait for health
+    import time
+    for _ in range(30):
+        try:
+            with urllib.request.urlopen(f"{base_url()}/health", timeout=2):
+                break
+        except Exception:
+            time.sleep(2)
+    print("\n  ✓ OpenWebUI is running!")
+    print(f"    Open http://localhost:{port()} and sign up (first account = admin).")
+    print("    Then: sprynt login <api-key> && sprynt import")
+
+
+def cmd_list(kit: Path, args) -> None:
+    groups = {
+        "TOOLS": list_tools(kit),
+        "SKILLS": list_json(kit, "skills"),
+        "MODELS": list_json(kit, "models"),
+        "PROMPTS": list_json(kit, "prompts"),
+    }
+    for kind, items in groups.items():
+        print(f"\n{kind}:")
+        if not items:
+            print("  (none)")
+            continue
+        for item_id, name in items:
+            print(f"  {item_id}  —  {name}")
+
+
+def cmd_import(kit: Path, args) -> None:
+    key = get_key()
+    picks = {"tools": None, "skills": None, "models": None, "prompts": None}
+    if args.select:
+        picks = interactive_pick(kit)
+    else:
+        if args.tools:
+            picks["tools"] = [t.strip() for t in args.tools.split(",") if t.strip()]
+        if args.skills:
+            picks["skills"] = [t.strip() for t in args.skills.split(",") if t.strip()]
+        if args.models:
+            picks["models"] = [t.strip() for t in args.models.split(",") if t.strip()]
+        if args.prompts:
+            picks["prompts"] = [t.strip() for t in args.prompts.split(",") if t.strip()]
+    # positional 'kind' + ids form: sprynt import tools a,b
+    if args.kind:
+        ids = [t.strip() for t in (args.ids or "").split(",") if t.strip()] or None
+        if args.kind == "tools":
+            import_tools(kit, key, ids)
+        elif args.kind == "skills":
+            import_skills(kit, key, ids)
+        elif args.kind == "models":
+            import_models(kit, key, ids)
+        elif args.kind == "prompts":
+            import_prompts(kit, key, ids)
+        return
+    # otherwise import everything (or whatever was picked)
+    import_tools(kit, key, picks["tools"])
+    import_skills(kit, key, picks["skills"])
+    import_models(kit, key, picks["models"])
+    import_prompts(kit, key, picks["prompts"])
+    print("\nDone. Tools → Workspace → Tools; Skills → Workspace → Skills;")
+    print("Models → Workspace → Models. (Connect your provider key for models to light up.)")
+
+
+def cmd_login(kit: Path, args) -> None:
+    CONFIG_PATH.parent.mkdir(exist_ok=True)
+    lines = []
+    if CONFIG_PATH.exists():
+        lines = [l for l in CONFIG_PATH.read_text().splitlines() if not l.startswith("key=")]
+    lines.append(f"key={args.key}")
+    CONFIG_PATH.write_text("\n".join(lines) + "\n")
+    print(f"  ✓ API key saved ({CONFIG_PATH})")
+
+
+def cmd_update(kit: Path, args) -> None:
+    r = docker_sudo("compose", "pull")
+    print(r.stdout.strip())
+    if r.returncode != 0:
+        print(r.stderr.strip() or "✗ pull failed")
+        sys.exit(1)
+    r = docker_sudo("compose", "up", "-d")
+    print(r.stdout.strip())
+    print("\n  ✓ updated. Your data in ./data was NOT touched.")
+
+
+def cmd_status(kit: Path, args) -> None:
+    r = docker_sudo("ps", "--filter", "name=openwebui", "--format", "{{.Names}} {{.Status}} {{.Image}}")
+    if r.returncode == 0 and r.stdout.strip():
+        print(f"  Container: {r.stdout.strip()}")
+    else:
+        print("  Container: not running")
+    try:
+        with urllib.request.urlopen(f"{base_url()}/api/config", timeout=3) as resp:
+            d = json.loads(resp.read())
+            print(f"  Version: {d.get('version')}")
+            print(f"  Name:    {d.get('name')}")
+    except Exception:
+        print(f"  API:     not reachable at {base_url()}")
+
+
+def cmd_remove(kit: Path, args) -> None:
+    r = docker_sudo("compose", "down")
+    print(r.stdout.strip())
+    print("\n  ✓ removed. Data in ./data kept (use --delete-data to remove).")
+
+
+def cmd_setup(kit: Path, args) -> None:
+    target = Path(args.path).resolve()
+    if not (target / MARKER).exists() and not (target / "docker-compose.yml").exists():
+        print(f"✗ {target} does not look like a kit (no docker-compose.yml)")
+        sys.exit(1)
+    CONFIG_PATH.parent.mkdir(exist_ok=True)
+    CONFIG_PATH.write_text(str(target) + "\n")
+    print(f"  ✓ kit location saved: {target}")
+
+
+# --------------------------------------------------------------------------
+# main
+# --------------------------------------------------------------------------
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="sprynt", description="Spryntworks kit CLI")
+    sub = p.add_subparsers(dest="cmd")
+
+    sub.add_parser("install", help="install the kit")
+    sub.add_parser("list", help="show bundled content")
+    sub.add_parser("update", help="update to newest version")
+    sub.add_parser("status", help="show running state")
+    sub.add_parser("remove", help="uninstall (keep data)")
+
+    sp = sub.add_parser("setup", help="point the CLI at the kit folder")
+    sp.add_argument("path", help="path to the kit folder")
+
+    lg = sub.add_parser("login", help="save the admin API key")
+    lg.add_argument("key", help="your admin API key")
+
+    im = sub.add_parser("import", help="import bundled content")
+    im.add_argument("kind", nargs="?", choices=["tools", "skills", "models", "prompts"], help="content type")
+    im.add_argument("ids", nargs="?", help="comma-separated ids (e.g. pdf_generator,generate_file)")
+    im.add_argument("--tools", help="tools to import (comma-separated)")
+    im.add_argument("--skills", help="skills to import (comma-separated)")
+    im.add_argument("--models", help="models to import (comma-separated)")
+    im.add_argument("--prompts", help="prompts to import (comma-separated)")
+    im.add_argument("--select", action="store_true", help="interactive selection")
+
+    args = p.parse_args()
+    if not args.cmd:
+        p.print_help()
+        sys.exit(0)
+
+    # commands that don't need the kit
+    if args.cmd == "login":
+        cmd_login(None, args)
+        return
+
+    kit = require_kit()
+    if args.cmd == "install":
+        cmd_install(kit, args)
+    elif args.cmd == "list":
+        cmd_list(kit, args)
+    elif args.cmd == "import":
+        cmd_import(kit, args)
+    elif args.cmd == "update":
+        cmd_update(kit, args)
+    elif args.cmd == "status":
+        cmd_status(kit, args)
+    elif args.cmd == "remove":
+        cmd_remove(kit, args)
+    elif args.cmd == "setup":
+        cmd_setup(kit, args)
+
+
+if __name__ == "__main__":
+    main()
