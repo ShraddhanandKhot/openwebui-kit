@@ -251,16 +251,20 @@ def interactive_pick(kit: Path) -> dict[str, list[str]]:
         "models": list_json(kit, "models"),
         "prompts": list_json(kit, "prompts"),
     }
-    # flatten into a numbered menu
-    menu = []
+    prefix = {"tools": "t", "skills": "s", "models": "m", "prompts": "p"}
+    # unique per-group codes: t1..tn, s1..sn, m1..mn — no number collisions
+    code_map = {}  # code -> (kind, item_id)
     for kind, items in groups.items():
         if not items:
             continue
         print(f"\n  {kind.upper()}:")
         for i, (item_id, name) in enumerate(items, start=1):
-            menu.append((kind, item_id))
-            print(f"    [{i}] {item_id}  ({name})")
-    print("\n  Enter numbers separated by commas (e.g. 1,3,5), or 'all':")
+            code = f"{prefix[kind]}{i}"
+            code_map[code] = (kind, item_id)
+            print(f"    [{code}] {item_id}  ({name})")
+    print("\n  Enter codes separated by commas, or 'all'.")
+    print("  Example: t2,m1   → tool #2 + model #1 only (no skills)")
+    print("  Hint: sprynt import tools <id> models <id> also works without the menu")
     try:
         raw = input("  > ").strip()
     except EOFError:
@@ -269,12 +273,9 @@ def interactive_pick(kit: Path) -> dict[str, list[str]]:
         return {k: [i for i, _ in v] for k, v in groups.items() if v}
     picks: dict[str, list[str]] = {}
     for token in raw.split(","):
-        token = token.strip()
-        if not token.isdigit():
-            continue
-        idx = int(token) - 1
-        if 0 <= idx < len(menu):
-            kind, item_id = menu[idx]
+        token = token.strip().lower()
+        if token in code_map:
+            kind, item_id = code_map[token]
             picks.setdefault(kind, []).append(item_id)
     return picks
 
