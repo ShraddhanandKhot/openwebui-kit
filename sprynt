@@ -172,6 +172,8 @@ def copy_anydoc(kit: Path) -> None:
 # --------------------------------------------------------------------------
 
 def import_tools(kit: Path, key: str, ids: list[str] | None) -> None:
+    if ids is not None and not ids:
+        return  # explicitly empty list = skip this type
     copy_anydoc(kit)
     for tid, fname in list_tools(kit):
         if ids and tid not in ids:
@@ -184,6 +186,8 @@ def import_tools(kit: Path, key: str, ids: list[str] | None) -> None:
 
 
 def import_skills(kit: Path, key: str, ids: list[str] | None) -> None:
+    if ids is not None and not ids:
+        return
     for sid, name in list_json(kit, "skills"):
         if ids and sid not in ids:
             continue
@@ -202,6 +206,8 @@ def import_skills(kit: Path, key: str, ids: list[str] | None) -> None:
 
 
 def import_models(kit: Path, key: str, ids: list[str] | None) -> None:
+    if ids is not None and not ids:
+        return
     for mid, name in list_json(kit, "models"):
         if ids and mid not in ids:
             continue
@@ -220,6 +226,8 @@ def import_models(kit: Path, key: str, ids: list[str] | None) -> None:
 
 
 def import_prompts(kit: Path, key: str, ids: list[str] | None) -> None:
+    if ids is not None and not ids:
+        return
     for pid, name in list_json(kit, "prompts"):
         if ids and pid not in ids:
             continue
@@ -269,9 +277,10 @@ def interactive_pick(kit: Path) -> dict[str, list[str]]:
         raw = input("  > ").strip()
     except EOFError:
         raw = "all"
+    # always return all keys; un-picked types get [] (skip)
+    picks: dict[str, list[str]] = {k: [] for k in groups}
     if raw.lower() == "all":
         return {k: [i for i, _ in v] for k, v in groups.items() if v}
-    picks: dict[str, list[str]] = {}
     for token in raw.split(","):
         token = token.strip().lower()
         if token in code_map:
@@ -358,10 +367,10 @@ def cmd_import(kit: Path, args) -> None:
             import_prompts(kit, key, ids)
         return
     # otherwise import everything (or whatever was picked)
-    import_tools(kit, key, picks["tools"])
-    import_skills(kit, key, picks["skills"])
-    import_models(kit, key, picks["models"])
-    import_prompts(kit, key, picks["prompts"])
+    import_tools(kit, key, picks.get("tools"))
+    import_skills(kit, key, picks.get("skills"))
+    import_models(kit, key, picks.get("models"))
+    import_prompts(kit, key, picks.get("prompts"))
     print("\nDone. Tools → Workspace → Tools; Skills → Workspace → Skills;")
     print("Models → Workspace → Models. (Connect your provider key for models to light up.)")
 
