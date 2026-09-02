@@ -2,7 +2,7 @@
 # Edit .env to change settings, then run ./install.sh (or docker compose up -d)
 services:
   openwebui:
-    image: ghcr.io/shraddhanandkhot/open-webui:v0.11.1-custom
+    image: ghcr.io/shraddhanandkhot/open-webui:v0.11.3-custom
     container_name: openwebui
     restart: unless-stopped
     ports:

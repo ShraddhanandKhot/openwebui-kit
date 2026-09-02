@@ -31,7 +31,7 @@ mkdir -p data
 echo "[✓] Data directory ready: ./data (your data lives here, survives updates)"
 
 # 4. Pull + start
-echo "[✓] Pulling image: ghcr.io/shraddhanandkhot/open-webui:v0.11.1-custom"
+echo "[✓] Pulling image: ghcr.io/shraddhanandkhot/open-webui:v0.11.3-custom"
 docker compose up -d --pull always
 
 # 5. Wait for health
