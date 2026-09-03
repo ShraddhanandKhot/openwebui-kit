@@ -532,7 +532,7 @@ def cmd_list(kit: Path, args) -> None:
     if not any(groups.values()):
         print("  This kit has no bundled content and no client identity.")
         print("  If this is a client kit, connect it to the registry:")
-        print("    sprynt login <client-id> <token> --registry http://YOUR-REGISTRY:8098")
+        print("    sprynt login <client-id> <token>   # registry URL is built in")
         print("  Then 'sprynt list' will show that client's items.")
         return
     for kind, items in groups.items():

@@ -52,10 +52,12 @@ ship our keys.
 This kit is delivered from the Spryntworks registry. Your content (tools/skills/models) is fetched per-client — you only get what your client is allowed to see:
 
 ```bash
-sprynt login <client-id> <token> --registry http://104.197.5.98:8082
+sprynt login <client-id> <token>     # registry URL is built in
 sprynt list
 sprynt import
 ```
+
+(the registry URL is already configured in the sprynt CLI — no need to type it)
 
 Key location: Settings → Admin Panel → API Keys → Generate.
 
