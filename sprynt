@@ -92,8 +92,21 @@ def config_path() -> Path:
 
 def load_config() -> dict:
     cfg = {}
+    # home config is the BASE (admin API key lives here, machine-wide)
+    if HOME_CONFIG.exists():
+        for line in HOME_CONFIG.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+            else:
+                cfg["kit"] = line  # legacy bare-path form
+    # per-kit config OVERLAYS it (client identity lives here) — so the
+    # admin key from ~/.spryntrc stays visible even when cwd is a kit.
     cp = config_path()
-    if cp.exists():
+    if cp != HOME_CONFIG and cp.exists():
         for line in cp.read_text().splitlines():
             line = line.strip()
             if not line:
@@ -604,22 +617,32 @@ def cmd_import(kit: Path, args) -> None:
 
 
 def cmd_login(kit: Path, args) -> None:
-    cfg = load_config()
     if args.key and args.token:
         # registry client identity: sprynt login <client-id> <token>
-        cfg["client"] = args.key
-        cfg["token"] = args.token
+        # ALWAYS goes into the kit's own .spryntrc (per-kit identity),
+        # never into the home config — so two kits don't share identity.
+        # Only identity fields are written (never the admin key).
+        if kit is None:
+            kit = find_kit()
+        identity = {"client": args.key, "token": args.token}
         if args.registry:
-            cfg["registry"] = args.registry.rstrip("/")
-        save_config(cfg)
+            identity["registry"] = args.registry.rstrip("/")
+        cp = kit / ".spryntrc"
+        cp.parent.mkdir(exist_ok=True)
+        lines = [f"{k}={v}" for k, v in identity.items() if v]
+        cp.write_text("\n".join(lines) + "\n")
         print(f"  ✓ client identity saved: {args.key}")
         print(f"    registry: {registry_url()}")
         return
     if args.key:
-        # otherwise: admin API key for the local OpenWebUI
+        # otherwise: admin API key for the local OpenWebUI — ALWAYS the
+        # home config (machine-wide), so it's visible from any kit folder.
+        cfg = load_config()
         cfg["key"] = args.key
-        save_config(cfg)
-        print(f"  ✓ API key saved ({config_path()})")
+        HOME_CONFIG.parent.mkdir(exist_ok=True)
+        lines = [f"{k}={v}" for k, v in cfg.items() if v]
+        HOME_CONFIG.write_text("\n".join(lines) + "\n")
+        print(f"  ✓ API key saved ({HOME_CONFIG})")
         return
     print("  usage: sprynt login <admin-api-key>")
     print("         sprynt login <client-id> <token> [--registry URL]")
