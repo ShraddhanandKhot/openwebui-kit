@@ -6,18 +6,28 @@ One command to install, list, import, update, and manage a customized
 OpenWebUI kit. Sub-commands:
 
   sprynt install                install the kit (docker compose up)
-  sprynt list                   show bundled tools/skills/models/prompts
-  sprynt import                 import ALL bundled content
+  sprynt list                   show available tools/skills/models/prompts
+  sprynt import                 import ALL available content
   sprynt import tools <ids>     import specific tools (comma-separated)
   sprynt import skills <ids>    import specific skills
   sprynt import models <ids>    import specific models
   sprynt import prompts <ids>   import specific prompts
   sprynt import --select        interactive selection
-  sprynt login <api-key>        remember the admin API key
+  sprynt login <api-key>        remember the admin API key (for the local OpenWebUI)
+  sprynt login <client> <token> [--registry URL]
+                                remember this machine's client identity + token
   sprynt update                 pull new image + restart
   sprynt status                 show running state + version
   sprynt remove                 uninstall (keep data)
   sprynt help                   show help
+
+Two delivery modes:
+  * BUNDLED kit — content ships inside the kit folder (tools/ + content/).
+    `sprynt list`/`import` read from the kit locally.
+  * REGISTRY kit — the kit is thin (installer + CLI only). Content lives on
+    the Spryntworks registry server (privacy enforced per client). After
+    `sprynt login <client> <token>`, `sprynt list`/`import` fetch ONLY the
+    items that client is allowed to see.
 
 Requirements: Python 3, Docker, and the kit folder (auto-detected).
 """
@@ -33,11 +43,12 @@ import urllib.request
 from pathlib import Path
 
 # --------------------------------------------------------------------------
-# kit detection
+# kit detection + config
 # --------------------------------------------------------------------------
 
 MARKER = ".sprynt-kit"
-CONFIG_PATH = Path.home() / ".spryntrc"
+HOME_CONFIG = Path.home() / ".spryntrc"
+DEFAULT_REGISTRY = "http://104.197.5.98:8082"
 
 
 def find_kit() -> Path:
@@ -45,16 +56,19 @@ def find_kit() -> Path:
     env = os.environ.get("SPRYNT_KIT")
     if env and Path(env).is_dir():
         return Path(env)
-    # 2. saved config
-    if CONFIG_PATH.exists():
-        p = CONFIG_PATH.read_text().strip()
-        if p and Path(p).is_dir():
-            return Path(p)
-    # 3. search cwd and parents for the marker
+    # 2. search cwd and parents for the marker
     cur = Path.cwd()
     for parent in [cur, *cur.parents]:
         if (parent / MARKER).exists():
             return parent
+    # 3. saved pointer in home config
+    if HOME_CONFIG.exists():
+        for line in HOME_CONFIG.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("kit="):
+                k = line.split("=", 1)[1].strip()
+                if Path(k).is_dir():
+                    return Path(k)
     # 4. fallback: look for the kit dir in home
     for candidate in (Path.home() / "openwebui-kit", Path.home() / "spryntworks-kit"):
         if candidate.exists() and (candidate / "docker-compose.yml").exists():
@@ -63,6 +77,40 @@ def find_kit() -> Path:
     print("  Run this from inside the kit folder, or set SPRYNT_KIT=/path/to/kit", file=sys.stderr)
     print("  or run: sprynt setup /path/to/kit", file=sys.stderr)
     sys.exit(1)
+
+
+def config_path() -> Path:
+    """Per-kit config lives INSIDE the kit folder (.spryntrc), so two kits on
+    the same machine (e.g. client-a and client-b during testing) never share
+    an identity. Only the 'kit=' pointer lives in the home config."""
+    cur = Path.cwd()
+    for parent in [cur, *cur.parents]:
+        if (parent / MARKER).exists():
+            return parent / ".spryntrc"
+    return HOME_CONFIG
+
+
+def load_config() -> dict:
+    cfg = {}
+    cp = config_path()
+    if cp.exists():
+        for line in cp.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip()
+            else:
+                cfg["kit"] = line  # legacy bare-path form
+    return cfg
+
+
+def save_config(cfg: dict) -> None:
+    cp = config_path()
+    cp.parent.mkdir(exist_ok=True)
+    lines = [f"{k}={v}" for k, v in cfg.items() if v]
+    cp.write_text("\n".join(lines) + "\n")
 
 
 def require_kit() -> Path:
@@ -76,7 +124,18 @@ def require_kit() -> Path:
 # --------------------------------------------------------------------------
 
 def port() -> str:
-    return os.environ.get("OPENWEBUI_PORT", "8080")
+    env = os.environ.get("OPENWEBUI_PORT")
+    if env:
+        return env
+    # read from the kit's .env so per-client kits hit their own port
+    try:
+        with open(".env") as f:
+            for line in f:
+                if line.startswith("OPENWEBUI_PORT="):
+                    return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return "8080"
 
 
 def base_url() -> str:
@@ -113,10 +172,9 @@ def get_key(store: bool = False) -> str:
     env_key = os.environ.get("SPRYNT_API_KEY")
     if env_key:
         return env_key
-    if CONFIG_PATH.exists():
-        for line in CONFIG_PATH.read_text().splitlines():
-            if line.startswith("key="):
-                return line.split("=", 1)[1].strip()
+    cfg = load_config()
+    if cfg.get("key"):
+        return cfg["key"]
     print("✗ No API key. Provide one with: sprynt login <api-key>")
     sys.exit(1)
 
@@ -131,7 +189,57 @@ def to_obj(v):
 
 
 # --------------------------------------------------------------------------
-# content discovery (what's bundled in the kit)
+# registry client (privacy server)
+# --------------------------------------------------------------------------
+
+def registry_url() -> str:
+    env = os.environ.get("SPRYNT_REGISTRY")
+    if env:
+        return env.rstrip("/")
+    cfg = load_config()
+    if cfg.get("registry"):
+        return cfg["registry"].rstrip("/")
+    return DEFAULT_REGISTRY
+
+
+def client_identity() -> tuple[str, str] | None:
+    """Return (client_id, token) if this machine logged in as a client."""
+    cfg = load_config()
+    if cfg.get("client") and cfg.get("token"):
+        return cfg["client"], cfg["token"]
+    return None
+
+
+def registry_get(path: str, token: str) -> tuple[int, dict]:
+    req = urllib.request.Request(
+        f"{registry_url()}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read())
+        except Exception:
+            return e.code, {"error": e.read().decode(errors="replace")}
+    except Exception as ex:
+        return 0, {"error": str(ex)}
+
+
+def registry_catalog(token: str) -> tuple[int, list[dict]]:
+    status, data = registry_get("/api/catalog", token)
+    if status == 200:
+        return status, data.get("items", [])
+    return status, []
+
+
+def registry_item(token: str, item_id: str) -> tuple[int, dict]:
+    return registry_get(f"/api/items/{item_id}", token)
+
+
+# --------------------------------------------------------------------------
+# content discovery (BUNDLED mode — what's in the kit folder)
 # --------------------------------------------------------------------------
 
 def list_tools(kit: Path) -> list[tuple[str, str]]:
@@ -168,7 +276,7 @@ def copy_anydoc(kit: Path) -> None:
 
 
 # --------------------------------------------------------------------------
-# import
+# import (BUNDLED mode)
 # --------------------------------------------------------------------------
 
 def import_tools(kit: Path, key: str, ids: list[str] | None) -> None:
@@ -191,8 +299,7 @@ def import_skills(kit: Path, key: str, ids: list[str] | None) -> None:
     for sid, name in list_json(kit, "skills"):
         if ids and sid not in ids:
             continue
-        d = json.loads((kit / "content" / "skills" / f"{sid}.json").read_text()) if (kit / "content" / "skills" / f"{sid}.json").exists() else {}
-        # find the file (id may differ from filename)
+        d = {}
         for p in (kit / "content" / "skills").glob("*.json"):
             dd = json.loads(p.read_text())
             if str(dd.get("id")) == sid:
@@ -211,12 +318,11 @@ def import_models(kit: Path, key: str, ids: list[str] | None) -> None:
     for mid, name in list_json(kit, "models"):
         if ids and mid not in ids:
             continue
+        dd = {}
         for p in (kit / "content" / "models").glob("*.json"):
             dd = json.loads(p.read_text())
             if str(dd.get("id")) == mid:
                 break
-        else:
-            dd = {}
         payload = {"id": mid, "base_model_id": dd.get("base_model_id"),
                    "name": name, "meta": to_obj(dd.get("meta")),
                    "params": to_obj(dd.get("params")),
@@ -231,12 +337,11 @@ def import_prompts(kit: Path, key: str, ids: list[str] | None) -> None:
     for pid, name in list_json(kit, "prompts"):
         if ids and pid not in ids:
             continue
+        dd = {}
         for p in (kit / "content" / "prompts").glob("*.json"):
             dd = json.loads(p.read_text())
             if str(dd.get("command") or dd.get("id")) == pid:
                 break
-        else:
-            dd = {}
         payload = {"command": dd.get("command", pid), "name": dd.get("name", name),
                    "content": dd.get("content", ""), "meta": to_obj(dd.get("meta"))}
         status, body = api_post("/api/v1/prompts/create", payload, key)
@@ -252,15 +357,8 @@ def _report(kind: str, item_id: str, status: int, body: str) -> None:
         print(f"  ✗ {kind}: {item_id} failed (HTTP {status}) {body[:160]}")
 
 
-def interactive_pick(kit: Path) -> dict[str, list[str]]:
-    groups = {
-        "tools": list_tools(kit),
-        "skills": list_json(kit, "skills"),
-        "models": list_json(kit, "models"),
-        "prompts": list_json(kit, "prompts"),
-    }
+def interactive_pick(groups: dict[str, list[tuple[str, str]]]) -> dict[str, list[str]]:
     prefix = {"tools": "t", "skills": "s", "models": "m", "prompts": "p"}
-    # unique per-group codes: t1..tn, s1..sn, m1..mn — no number collisions
     code_map = {}  # code -> (kind, item_id)
     for kind, items in groups.items():
         if not items:
@@ -277,7 +375,6 @@ def interactive_pick(kit: Path) -> dict[str, list[str]]:
         raw = input("  > ").strip()
     except EOFError:
         raw = "all"
-    # always return all keys; un-picked types get [] (skip)
     picks: dict[str, list[str]] = {k: [] for k in groups}
     if raw.lower() == "all":
         return {k: [i for i, _ in v] for k, v in groups.items() if v}
@@ -289,17 +386,97 @@ def interactive_pick(kit: Path) -> dict[str, list[str]]:
     return picks
 
 
+def bundled_groups(kit: Path) -> dict[str, list[tuple[str, str]]]:
+    return {
+        "tools": list_tools(kit),
+        "skills": list_json(kit, "skills"),
+        "models": list_json(kit, "models"),
+        "prompts": list_json(kit, "prompts"),
+    }
+
+
+def registry_groups(token: str) -> dict[str, list[tuple[str, str]]]:
+    """Fetch the catalog from the registry and group by type."""
+    status, items = registry_catalog(token)
+    groups = {"tools": [], "skills": [], "models": [], "prompts": []}
+    if status != 200:
+        return groups
+    for it in items:
+        kind = it.get("type")
+        if kind in groups:
+            groups[kind].append((it.get("id", ""), it.get("name", "")))
+    return groups
+
+
+# --------------------------------------------------------------------------
+# import (REGISTRY mode — content fetched from the privacy server)
+# --------------------------------------------------------------------------
+
+def import_registry(key: str, token: str, picks: dict[str, list[str] | None]) -> None:
+    """Fetch the catalog, then each allowed item's content, then POST to the
+    local OpenWebUI. The server enforces privacy: items not for this client
+    are never returned."""
+    status, items = registry_catalog(token)
+    if status != 200:
+        print(f"✗ registry unreachable ({registry_url()}): {status}")
+        print("  Check: sprynt login <client> <token> --registry <url>, and that the server is up.")
+        sys.exit(1)
+    for it in items:
+        kind = it.get("type")
+        iid = it.get("id")
+        if kind not in picks:
+            continue
+        wanted = picks.get(kind)
+        if wanted is not None and iid not in wanted:
+            continue
+        st, data = registry_item(token, iid)
+        if st != 200:
+            print(f"  ✗ {kind}: {iid} — server refused ({st}) {data.get('error', '')}")
+            continue
+        content = data.get("content", "")
+        if kind == "tools":
+            status, body = api_post("/api/v1/tools/create",
+                                    {"id": iid, "name": iid, "content": content,
+                                     "meta": {"description": iid}}, key)
+            _report("tool", iid, status, body)
+        elif kind == "skills":
+            d = to_obj(content)
+            status, body = api_post("/api/v1/skills/create",
+                                    {"id": iid, "name": d.get("name", iid),
+                                     "description": d.get("description", ""),
+                                     "content": d.get("content", ""),
+                                     "meta": to_obj(d.get("meta")),
+                                     "is_active": bool(d.get("is_active", True))}, key)
+            _report("skill", iid, status, body)
+        elif kind == "models":
+            d = to_obj(content)
+            status, body = api_post("/api/v1/models/create",
+                                    {"id": iid, "base_model_id": d.get("base_model_id"),
+                                     "name": d.get("name", iid),
+                                     "meta": to_obj(d.get("meta")),
+                                     "params": to_obj(d.get("params")),
+                                     "is_active": bool(d.get("is_active", True))}, key)
+            _report("model", iid, status, body)
+        elif kind == "prompts":
+            d = to_obj(content)
+            status, body = api_post("/api/v1/prompts/create",
+                                    {"command": d.get("command", iid),
+                                     "name": d.get("name", iid),
+                                     "content": d.get("content", ""),
+                                     "meta": to_obj(d.get("meta"))}, key)
+            _report("prompt", iid, status, body)
+
+
 # --------------------------------------------------------------------------
 # sub-commands
 # --------------------------------------------------------------------------
 
 def cmd_install(kit: Path, args) -> None:
-    # docker check
     r = docker("--version")
     if r.returncode != 0:
         print("✗ Docker is not installed. Install Docker first, then re-run.")
         sys.exit(1)
-    print(f"  ✓ Docker found")
+    print("  ✓ Docker found")
     if not (kit / ".env").exists():
         if (kit / ".env.example").exists():
             shutil.copy2(kit / ".env.example", kit / ".env")
@@ -311,7 +488,6 @@ def cmd_install(kit: Path, args) -> None:
     if r.returncode != 0:
         print(r.stderr.strip() or "✗ failed to start")
         sys.exit(1)
-    # wait for health
     import time
     for _ in range(30):
         try:
@@ -325,12 +501,40 @@ def cmd_install(kit: Path, args) -> None:
 
 
 def cmd_list(kit: Path, args) -> None:
+    ident = client_identity()
+    if ident:
+        cid, token = ident
+        status, items = registry_catalog(token)
+        if status == 200:
+            groups = {"TOOLS": [], "SKILLS": [], "MODELS": [], "PROMPTS": []}
+            for it in items:
+                kind = it.get("type")
+                label = {"tools": "TOOLS", "skills": "SKILLS",
+                         "models": "MODELS", "prompts": "PROMPTS"}.get(kind)
+                if label:
+                    groups[label].append((it.get("id", ""), it.get("name", "")))
+            print(f"  (client: {cid} — from registry {registry_url()})")
+            for kind, items in groups.items():
+                print(f"\n{kind}:")
+                if not items:
+                    print("  (none)")
+                    continue
+                for item_id, name in items:
+                    print(f"  {item_id}  —  {name}")
+            return
+        print(f"  ⚠ registry unreachable ({registry_url()}) — showing bundled content instead")
     groups = {
         "TOOLS": list_tools(kit),
         "SKILLS": list_json(kit, "skills"),
         "MODELS": list_json(kit, "models"),
         "PROMPTS": list_json(kit, "prompts"),
     }
+    if not any(groups.values()):
+        print("  This kit has no bundled content and no client identity.")
+        print("  If this is a client kit, connect it to the registry:")
+        print("    sprynt login <client-id> <token> --registry http://YOUR-REGISTRY:8098")
+        print("  Then 'sprynt list' will show that client's items.")
+        return
     for kind, items in groups.items():
         print(f"\n{kind}:")
         if not items:
@@ -340,21 +544,46 @@ def cmd_list(kit: Path, args) -> None:
             print(f"  {item_id}  —  {name}")
 
 
-def cmd_import(kit: Path, args) -> None:
-    key = get_key()
+def _build_picks(args, groups_fn) -> dict:
+    """Decide which items to import.
+    - no selection at all        → every kind = None (import ALL)
+    - any kind/flag/select given → unspecified kinds = [] (skip)
+    """
     picks = {"tools": None, "skills": None, "models": None, "prompts": None}
     if args.select:
-        picks = interactive_pick(kit)
-    else:
-        if args.tools:
-            picks["tools"] = [t.strip() for t in args.tools.split(",") if t.strip()]
-        if args.skills:
-            picks["skills"] = [t.strip() for t in args.skills.split(",") if t.strip()]
-        if args.models:
-            picks["models"] = [t.strip() for t in args.models.split(",") if t.strip()]
-        if args.prompts:
-            picks["prompts"] = [t.strip() for t in args.prompts.split(",") if t.strip()]
-    # positional 'kind' + ids form: sprynt import tools a,b
+        return interactive_pick(groups_fn())
+    specific = any([args.kind, args.tools, args.skills, args.models, args.prompts])
+    if not specific:
+        return picks
+    picks = {"tools": [], "skills": [], "models": [], "prompts": []}
+    if args.tools:
+        picks["tools"] = [t.strip() for t in args.tools.split(",") if t.strip()]
+    if args.skills:
+        picks["skills"] = [t.strip() for t in args.skills.split(",") if t.strip()]
+    if args.models:
+        picks["models"] = [t.strip() for t in args.models.split(",") if t.strip()]
+    if args.prompts:
+        picks["prompts"] = [t.strip() for t in args.prompts.split(",") if t.strip()]
+    if args.kind:
+        ids = [t.strip() for t in (args.ids or "").split(",") if t.strip()] or None
+        picks[args.kind] = ids
+    return picks
+
+
+def cmd_import(kit: Path, args) -> None:
+    key = get_key()
+    ident = client_identity()
+    if ident:
+        cid, token = ident
+        print(f"  (client: {cid} — pulling from registry {registry_url()})")
+        picks = _build_picks(args, lambda: registry_groups(token))
+        import_registry(key, token, picks)
+        print("\nDone. Tools → Workspace → Tools; Skills → Workspace → Skills;")
+        print("Models → Workspace → Models. (Connect your provider key for models to light up.)")
+        return
+
+    # BUNDLED mode (no client identity)
+    picks = _build_picks(args, lambda: bundled_groups(kit))
     if args.kind:
         ids = [t.strip() for t in (args.ids or "").split(",") if t.strip()] or None
         if args.kind == "tools":
@@ -366,7 +595,6 @@ def cmd_import(kit: Path, args) -> None:
         elif args.kind == "prompts":
             import_prompts(kit, key, ids)
         return
-    # otherwise import everything (or whatever was picked)
     import_tools(kit, key, picks.get("tools"))
     import_skills(kit, key, picks.get("skills"))
     import_models(kit, key, picks.get("models"))
@@ -376,13 +604,26 @@ def cmd_import(kit: Path, args) -> None:
 
 
 def cmd_login(kit: Path, args) -> None:
-    CONFIG_PATH.parent.mkdir(exist_ok=True)
-    lines = []
-    if CONFIG_PATH.exists():
-        lines = [l for l in CONFIG_PATH.read_text().splitlines() if not l.startswith("key=")]
-    lines.append(f"key={args.key}")
-    CONFIG_PATH.write_text("\n".join(lines) + "\n")
-    print(f"  ✓ API key saved ({CONFIG_PATH})")
+    cfg = load_config()
+    if args.key and args.token:
+        # registry client identity: sprynt login <client-id> <token>
+        cfg["client"] = args.key
+        cfg["token"] = args.token
+        if args.registry:
+            cfg["registry"] = args.registry.rstrip("/")
+        save_config(cfg)
+        print(f"  ✓ client identity saved: {args.key}")
+        print(f"    registry: {registry_url()}")
+        return
+    if args.key:
+        # otherwise: admin API key for the local OpenWebUI
+        cfg["key"] = args.key
+        save_config(cfg)
+        print(f"  ✓ API key saved ({config_path()})")
+        return
+    print("  usage: sprynt login <admin-api-key>")
+    print("         sprynt login <client-id> <token> [--registry URL]")
+    sys.exit(1)
 
 
 def cmd_update(kit: Path, args) -> None:
@@ -422,8 +663,9 @@ def cmd_setup(kit: Path, args) -> None:
     if not (target / MARKER).exists() and not (target / "docker-compose.yml").exists():
         print(f"✗ {target} does not look like a kit (no docker-compose.yml)")
         sys.exit(1)
-    CONFIG_PATH.parent.mkdir(exist_ok=True)
-    CONFIG_PATH.write_text(str(target) + "\n")
+    cfg = load_config()
+    cfg["kit"] = str(target)
+    save_config(cfg)
     print(f"  ✓ kit location saved: {target}")
 
 
@@ -436,7 +678,7 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd")
 
     sub.add_parser("install", help="install the kit")
-    sub.add_parser("list", help="show bundled content")
+    sub.add_parser("list", help="show available content")
     sub.add_parser("update", help="update to newest version")
     sub.add_parser("status", help="show running state")
     sub.add_parser("remove", help="uninstall (keep data)")
@@ -444,10 +686,12 @@ def main() -> None:
     sp = sub.add_parser("setup", help="point the CLI at the kit folder")
     sp.add_argument("path", help="path to the kit folder")
 
-    lg = sub.add_parser("login", help="save the admin API key")
-    lg.add_argument("key", help="your admin API key")
+    lg = sub.add_parser("login", help="save admin API key, or client identity + token")
+    lg.add_argument("key", nargs="?", help="your admin API key (or client id when a token follows)")
+    lg.add_argument("token", nargs="?", help="your registry token (client login)")
+    lg.add_argument("--registry", help="registry URL (default http://localhost:8098)")
 
-    im = sub.add_parser("import", help="import bundled content")
+    im = sub.add_parser("import", help="import content")
     im.add_argument("kind", nargs="?", choices=["tools", "skills", "models", "prompts"], help="content type")
     im.add_argument("ids", nargs="?", help="comma-separated ids (e.g. pdf_generator,generate_file)")
     im.add_argument("--tools", help="tools to import (comma-separated)")

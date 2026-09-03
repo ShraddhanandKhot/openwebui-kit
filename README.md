@@ -1,6 +1,6 @@
 # OpenWebUI — Customized OpenWebUI with Spryntworks patches, AnyDoc pipeline, and file-generation tools
 
-A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts), Sprynt CLI (one-command client tool).
+A customized OpenWebUI delivered by Spryntworks. Includes Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools, Workspace Content (Skills + Prompts), Sprynt CLI (one-command client tool).
 
 ## Quick start
 
@@ -22,7 +22,7 @@ Install the one-word command, then use it for everything:
 sudo bash install-sprynt.sh          # installs the 'sprynt' command
 sprynt install                       # install (same as ./install.sh)
 sprynt login <admin-api-key>         # save your key once
-sprynt list                          # see bundled tools/skills/models
+sprynt list                          # see your tools/skills/models
 sprynt import                        # import everything
 sprynt import tools pdf_generator    # import specific items only
 sprynt status                        # is it running? which version?
@@ -49,31 +49,22 @@ ship our keys.
 
 ## Import your content (Tools / Skills / Prompts)
 
-All-in-one (everything bundled):
-```bash
-./import-content.sh <your-admin-api-key>
-```
+This kit is delivered from the Spryntworks registry. Your content (tools/skills/models) is fetched per-client — you only get what your client is allowed to see:
 
-Or separately:
 ```bash
-./import-tools.sh    <your-admin-api-key>   # Tools only
-./import-skills.sh   <your-admin-api-key>   # Skills only
-./import-prompts.sh  <your-admin-api-key>   # Prompts only
-./import-models.sh   <your-admin-api-key>   # Models only
+sprynt login <client-id> <token> --registry http://104.197.5.98:8082
+sprynt list
+sprynt import
 ```
 
 Key location: Settings → Admin Panel → API Keys → Generate.
 
 ## Models
 
-The bundled models are configs/wrappers (name, base model, attached
+The models are configs/wrappers (name, base model, attached
 tools/skills, parameters). Connect YOUR provider first:
 **Settings → Model Connections** → paste your OpenAI / OpenRouter /
-Ollama key — then import the model configs:
-
-```bash
-./import-models.sh <your-admin-api-key>
-```
+Ollama key — then import the model configs with `sprynt import models`.
 
 Your API key is never shipped — it stays on your machine.
 
@@ -99,7 +90,7 @@ It survives every update — never delete it unless you want to start fresh.
 
 ## What's included
 
-- Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools (8 tools), Workspace Content (Skills + Prompts), Sprynt CLI (one-command client tool)
+- Custom Theming (CSS), Backend Source Patches, AnyDoc Pipeline, Workspace Tools, Workspace Content (Skills + Prompts), Sprynt CLI (one-command client tool)
 
 ## Support
 
